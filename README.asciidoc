@@ -1,5 +1,21 @@
 = kitty - the fast, feature-rich, cross-platform, GPU based terminal
 
+== kitty-devanagari fork
+
+This fork fixes demonstrated Devanagari vowel-mark clipping in kitty's macOS
+CoreText renderer. It checks the bounds of positioned glyphs before fitting
+overflowing text into its existing cells. English cell spacing is unchanged.
+
+The `devanagari` branch is based on upstream *v0.47.4*, not the latest upstream
+release. This is a native rendering patch, not a kitten or a new font. Some
+syllables become smaller to fit; this does not provide natural-width layout
+for every terminal application.
+
+See link:DEVANAGARI.asciidoc[the patch, validation, and build instructions].
+Upstream kitty documentation follows.
+
+== Upstream kitty
+
 If you live in the terminal, *kitty* is made for **you**!
 
 See https://sw.kovidgoyal.net/kitty/[the kitty website].

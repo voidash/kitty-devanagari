@@ -14,6 +14,7 @@ from kitty.constants import is_macos, read_kitty_resource
 from kitty.fast_data_types import (
     DECAWM,
     ParsedFontFeature,
+    Screen,
     get_fallback_font,
     set_allow_use_of_box_fonts,
     sprite_idx_to_pos,
@@ -318,6 +319,28 @@ class FontBaseTest(BaseTest):
         self.font_path_cache = {}
         super().tearDown()
 
+
+
+@unittest.skipUnless(is_macos, 'CoreText glyph bounds are macOS-specific')
+class CoreTextPositionedBounds(FontBaseTest):
+
+    font_name = 'positioned-bounds.ttf'
+    font_size = 100.0
+
+    def test_positioned_mark_fits_cell(self):
+        # The fixture has a 600-unit cell, a base rectangle at x=0..400,
+        # and a mark positioned by GPOS at x=800..980, y=900..1000.
+        # Both glyphs fit individually; only their positioned bounds reveal
+        # that the mark is outside the cell. Without fitting the full run,
+        # the mark disappears entirely. After fitting, it is above the base.
+        s = Screen(None, 1, 2)
+        s.draw('A\u0301')
+        self.ae(s.cursor.x, 1)
+        line = s.line(0)
+        test_render_line(line)
+        sprite = self.sprites[sprite_idx_to_pos(line.sprite_at(0), setup_for_testing.xnum, setup_for_testing.ynum)]
+        upper_half = sprite[:self.cell_width * (self.cell_height // 2) * 4:4]
+        self.assertTrue(any(upper_half), 'the positioned combining mark was clipped')
 
 
 class Rendering(FontBaseTest):

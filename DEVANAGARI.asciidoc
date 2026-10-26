@@ -1,0 +1,64 @@
+= Devanagari clipping correction
+
+== Scope
+
+This fork contains a macOS CoreText rendering correction based on upstream
+kitty v0.47.4 (`a685af8c351bc4521be17e939eb619b76dbcd646`). It is not an
+upstream release and has not been rebased onto newer kitty versions.
+
+A shaped syllable can contain a base and a spacing vowel mark that each fit
+inside a cell individually. Their positioned combination can extend beyond
+the cell. The original overflow check ignored HarfBuzz advances and offsets,
+allowing the vowel mark to be clipped.
+
+The correction in `kitty/core_text.m` checks the right edge after calculating
+glyph positions. It then uses kitty's existing proportional size reduction
+to fit overflowing glyphs. Allocation failure is propagated explicitly.
+There are no changes to terminal cell widths, cursor accounting, or fonts.
+
+This corrects the demonstrated right-edge clipping. It does not promise
+consistent visual size for every syllable, address unrelated left-edge or
+vertical clipping, or supply natural-width editing in unmodified applications.
+Linux uses a different renderer and is not changed by this patch.
+
+== Build and test
+
+Follow the dependencies and platform instructions in
+https://sw.kovidgoyal.net/kitty/build/[the upstream build documentation].
+From this branch:
+
+[source,sh]
+----
+./dev.sh build
+kitty/launcher/kitty +launch test.py --module fonts
+kitty/launcher/kitty +launch test.py --module multicell
+----
+
+The synthetic `kitty_tests/positioned-bounds.ttf` fixture has a 600-unit base
+advance and a combining mark positioned by GPOS at x=800..980, y=900..1000.
+The regression test checks that the mark remains visible. It fails with the
+original rendering code and passes with the correction. The fixture does not
+depend on a user's installed Devanagari fonts.
+
+== Local validation
+
+On macOS, with Maple Mono and Noto Sans Devanagari:
+
+* Font suite: 14 tests, 11 passed and 3 expected platform skips.
+* Multicell suite: 2 tests passed.
+* 96 Latin rendering cases were pixel-identical to the original renderer,
+  covering three sizes, two DPI settings, four styles, printable ASCII,
+  accented Latin, and operator sequences.
+* 915 Unicode parser round trips preserved text, including wrapped text and
+  explicit joiners.
+* Rendered Nepali samples were inspected for the previously clipped vowel marks.
+
+The Latin pixel comparison and Unicode round-trip checks were local experiments,
+not committed automated CI coverage. Live desktop input editing was not
+verified. The committed regression and the existing font suite are the
+reproducible checks included here.
+
+Replacing a running app does not load the new native code into existing windows.
+Fully quit and reopen the patched app after installing it. Keep the original
+app available for rollback. An upstream upgrade or reinstall can overwrite a
+locally installed build.

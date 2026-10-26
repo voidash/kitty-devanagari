@@ -1045,29 +1045,27 @@ do_render(CTFontRef ct_font, unsigned int units_per_em, bool bold, bool italic, 
     ensure_render_space(canvas_width, cell_height, num_glyphs);
     CGRect br = CTFontGetBoundingRectsForGlyphs(ct_font, kCTFontOrientationHorizontal, buffers.glyphs, buffers.boxes, num_glyphs);
     const bool debug_rendering = false;
-    if (allow_resize) {
-        // Resize glyphs that would bleed into neighboring cells, by scaling the font size
-        float right = 0;
-        for (unsigned i=0; i < num_glyphs; i++) right = MAX(right, buffers.boxes[i].origin.x + buffers.boxes[i].size.width);
-        if (!bold && !italic && right > canvas_width + 1) {
-            if (debug_rendering) printf("resizing glyphs, right: %f canvas_width: %u\n", right, canvas_width);
-            CGFloat sz = CTFontGetSize(ct_font);
-            sz *= canvas_width / right;
-            CTFontRef new_font = CTFontCreateCopyWithAttributes(ct_font, sz, NULL, NULL);
-            bool ret = do_render(new_font, CTFontGetUnitsPerEm(new_font), bold, italic, info, hb_positions, num_glyphs, canvas, cell_width, cell_height, num_cells, baseline, was_colored, false, fg, ri);
-            CFRelease(new_font);
-            return ret;
-        }
-    }
     CGFloat x = 0, y = 0;
     CGFloat scale = CTFontGetSize(ct_font) / units_per_em;
+    CGFloat right = 0;
     for (unsigned i=0; i < num_glyphs; i++) {
         buffers.positions[i].x = x + hb_positions[i].x_offset * scale; buffers.positions[i].y = y + hb_positions[i].y_offset * scale;
+        right = MAX(right, buffers.positions[i].x + CGRectGetMaxX(buffers.boxes[i]));
         if (debug_rendering) printf("x=%f y=%f origin=%f width=%f x_advance=%f x_offset=%f y_advance=%f y_offset=%f\n",
                 buffers.positions[i].x, buffers.positions[i].y, buffers.boxes[i].origin.x, buffers.boxes[i].size.width,
                 hb_positions[i].x_advance * scale, hb_positions[i].x_offset * scale,
                 hb_positions[i].y_advance * scale, hb_positions[i].y_offset * scale);
         x += hb_positions[i].x_advance * scale; y += hb_positions[i].y_advance * scale;
+    }
+    if (allow_resize && !bold && !italic && right > canvas_width + 1) {
+        // Fit the positioned glyphs, not their individual bounds at the origin.
+        // In particular, a base and its spacing vowel mark may each fit in a
+        // cell while their shaped combination extends beyond its right edge.
+        if (debug_rendering) printf("resizing glyphs, right: %f canvas_width: %u\n", (double)right, canvas_width);
+        CGFloat sz = CTFontGetSize(ct_font) * canvas_width / right;
+        RAII_CoreFoundation(CTFontRef, new_font, CTFontCreateCopyWithAttributes(ct_font, sz, NULL, NULL));
+        if (!new_font) { PyErr_NoMemory(); return false; }
+        return do_render(new_font, CTFontGetUnitsPerEm(new_font), bold, italic, info, hb_positions, num_glyphs, canvas, cell_width, cell_height, num_cells, baseline, was_colored, false, fg, ri);
     }
     if (*was_colored) {
         render_color_glyph(ct_font, (uint8_t*)canvas, info[0].codepoint, cell_width * num_cells, cell_height, baseline);
